@@ -1,9 +1,12 @@
 package actions
 
 import (
+	"fmt"
+	"github.com/gomodule/redigo/redis"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/nyaruka/goflow/flows"
@@ -134,6 +137,27 @@ func (a *CallWebhookAction) call(run flows.Run, step flows.Step, url, method, bo
 
 		req.Header.Add(key, headerValue)
 	}
+
+	redisPool := &redis.Pool{
+		Wait:        true,              // makes callers wait for a connection
+		MaxActive:   5,                 // only open this many concurrent connections at once
+		MaxIdle:     2,                 // only keep up to 2 idle
+		IdleTimeout: 240 * time.Second, // how long to wait before reaping a connection
+		Dial: func() (redis.Conn, error) {
+			conn, err := redis.Dial("tcp", fmt.Sprintf("%s", ""))
+			if err != nil {
+				return nil, err
+			}
+
+			// switch to the right DB
+			_, err = conn.Do("SELECT", strings.TrimLeft("", "/"))
+			return conn, err
+		},
+	}
+
+	conn := redisPool.Get()
+	access_token, err := redis.String(conn.Do("GET", "access_token"))
+	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", access_token))
 
 	svc, err := run.Session().Engine().Services().Webhook(run.Session().Assets())
 	if err != nil {

@@ -19,6 +19,7 @@ require (
 	golang.org/x/net v0.0.0-20220614195744-fb05da6f9022
 	golang.org/x/text v0.3.7
 	gopkg.in/go-playground/validator.v9 v9.31.0
+	github.com/gomodule/redigo v2.0.0+incompatible
 )
 
 require (
