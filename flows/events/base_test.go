@@ -40,7 +40,12 @@ func TestEventMarshaling(t *testing.T) {
 
 	tz, _ := time.LoadLocation("Africa/Kigali")
 	timeout := 500
+	expiresOn := time.Date(2022, 2, 3, 13, 45, 30, 0, time.UTC)
 	gender := session.Assets().Fields().Get("gender")
+	mailgun := session.Assets().Ticketers().Get("19dc6346-9623-4fe4-be80-538d493ecdf5")
+	weather := session.Assets().Topics().Get("472a7a73-96cb-4736-b567-056d987cc5b4")
+	user := session.Assets().Users().Get("bob@nyaruka.com")
+	ticket := flows.NewTicket("7481888c-07dd-47dc-bf22-ef7448696ffe", mailgun, weather, "Where are my cookies?", "1243252", user)
 
 	eventTests := []struct {
 		event     flows.Event
@@ -57,12 +62,15 @@ func TestEventMarshaling(t *testing.T) {
 				},
 				[]*flows.HTTPLog{
 					{
+						HTTPTrace: &flows.HTTPTrace{
+							URL:        "https://send.money.com/topup",
+							StatusCode: 200,
+							Status:     flows.CallStatusSuccess,
+							Request:    "POST /topup HTTP/1.1\r\nHost: send.money.com\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
+							Response:   "HTTP/1.0 200 OK\r\nContent-Length: 14\r\n\r\n{\"errors\":[]}",
+							ElapsedMS:  12,
+						},
 						CreatedOn: dates.Now(),
-						ElapsedMS: 12,
-						Request:   "POST /topup HTTP/1.1\r\nHost: send.money.com\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
-						Response:  "HTTP/1.0 200 OK\r\nContent-Length: 14\r\n\r\n{\"errors\":[]}",
-						Status:    flows.CallStatusSuccess,
-						URL:       "https://send.money.com/topup",
 					},
 				},
 			),
@@ -73,12 +81,14 @@ func TestEventMarshaling(t *testing.T) {
         	    "desired_amount": 1.2,
 				"http_logs": [
 					{
-						"created_on": "2018-10-18T14:20:30.000123456Z",
-						"elapsed_ms": 12,
+						"url": "https://send.money.com/topup",
+						"status_code": 200,
+						"status": "success",
 						"request": "POST /topup HTTP/1.1\r\nHost: send.money.com\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
 						"response": "HTTP/1.0 200 OK\r\nContent-Length: 14\r\n\r\n{\"errors\":[]}",
-						"status": "success",
-						"url": "https://send.money.com/topup"
+						"elapsed_ms": 12,
+						"retries": 0,
+						"created_on": "2018-10-18T14:20:30.000123456Z"
 					}
 				],
 				"recipient": "tel:+593979099222",
@@ -135,12 +145,15 @@ func TestEventMarshaling(t *testing.T) {
 				assets.NewClassifierReference(assets.ClassifierUUID("4b937f49-7fb7-43a5-8e57-14e2f028a471"), "Booking"),
 				[]*flows.HTTPLog{
 					{
+						HTTPTrace: &flows.HTTPTrace{
+							URL:        "https://api.wit.ai/message?v=20200513&q=hello",
+							StatusCode: 200,
+							Status:     flows.CallStatusSuccess,
+							Request:    "GET /message?v=20200513&q=hello HTTP/1.1\r\nHost: api.wit.ai\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
+							Response:   "HTTP/1.0 200 OK\r\nContent-Length: 14\r\n\r\n{\"intents\":[]}",
+							ElapsedMS:  12,
+						},
 						CreatedOn: dates.Now(),
-						ElapsedMS: 12,
-						Request:   "GET /message?v=20200513&q=hello HTTP/1.1\r\nHost: api.wit.ai\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
-						Response:  "HTTP/1.0 200 OK\r\nContent-Length: 14\r\n\r\n{\"intents\":[]}",
-						Status:    flows.CallStatusSuccess,
-						URL:       "https://api.wit.ai/message?v=20200513&q=hello",
 					},
 				},
 			),
@@ -154,12 +167,14 @@ func TestEventMarshaling(t *testing.T) {
 				},
 				"http_logs": [
 					{
-						"created_on": "2018-10-18T14:20:30.000123456Z",
-						"elapsed_ms": 12,
+						"url": "https://api.wit.ai/message?v=20200513&q=hello",
+						"status_code": 200,
+						"status": "success",
 						"request": "GET /message?v=20200513&q=hello HTTP/1.1\r\nHost: api.wit.ai\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
 						"response": "HTTP/1.0 200 OK\r\nContent-Length: 14\r\n\r\n{\"intents\":[]}",
-						"status": "success",
-						"url": "https://api.wit.ai/message?v=20200513&q=hello"
+						"elapsed_ms": 12,
+						"retries": 0,
+						"created_on": "2018-10-18T14:20:30.000123456Z"
 					}
 				]
 			}`,
@@ -280,6 +295,33 @@ func TestEventMarshaling(t *testing.T) {
 					"last_seen_on": "2017-12-31T11:35:10.035757258-02:00",
 					"name": "Ryan Lewis",
 					"status": "active",
+					"tickets": [
+						{
+							"body": "I have a problem",
+							"ticketer": {
+								"name": "Support Tickets",
+								"uuid": "19dc6346-9623-4fe4-be80-538d493ecdf5"
+							},
+							"topic": null,
+							"uuid": "e5f5a9b0-1c08-4e56-8f5c-92e00bc3cf52"
+						},
+						{
+							"assignee": {
+								"email": "bob@nyaruka.com",
+								"name": "Bob"
+							},
+							"body": "What day is it?",
+							"ticketer": {
+								"name": "Support Tickets",
+								"uuid": "19dc6346-9623-4fe4-be80-538d493ecdf5"
+							},
+							"topic": {
+								"uuid": "472a7a73-96cb-4736-b567-056d987cc5b4",
+                    			"name": "Weather"
+							},
+							"uuid": "78d1fe0d-7e39-461e-81c3-a6a25f15ed69"
+						}
+					],
 					"timezone": "America/Guayaquil",
 					"urns": [
 						"tel:+12024561111?channel=57f1078f-88aa-46f4-a59a-948a5739c03d",
@@ -343,7 +385,6 @@ func TestEventMarshaling(t *testing.T) {
 					],
 					"date_format": "DD-MM-YYYY",
 					"default_country": "US",
-					"default_language": "eng",
 					"max_value_length": 640,
 					"number_format": {
 						"decimal_symbol": ".",
@@ -407,19 +448,20 @@ func TestEventMarshaling(t *testing.T) {
 			}`,
 		},
 		{
-			events.NewMsgWait(&timeout, hints.NewImageHint()),
+			events.NewMsgWait(&timeout, &expiresOn, hints.NewImageHint()),
 			`{
+				"type": "msg_wait",
 				"created_on": "2018-10-18T14:20:30.000123456Z",
-				"hint": {"type": "image"},
 				"timeout_seconds": 500,
-				"type": "msg_wait"
+				"expires_on": "2022-02-03T13:45:30Z",
+				"hint": {"type": "image"}
 			}`,
 		},
 		{
 			events.NewWaitTimedOut(),
 			`{
-				"created_on": "2018-10-18T14:20:30.000123456Z",
-				"type": "wait_timed_out"
+				"type": "wait_timed_out",
+				"created_on": "2018-10-18T14:20:30.000123456Z"
 			}`,
 		},
 		{
@@ -434,11 +476,12 @@ func TestEventMarshaling(t *testing.T) {
 			}`,
 		},
 		{
-			events.NewDialWait(urns.URN("tel:+1234567890")),
+			events.NewDialWait(urns.URN("tel:+1234567890"), &expiresOn),
 			`{
 				"type": "dial_wait",
 				"created_on": "2018-10-18T14:20:30.000123456Z",
-				"urn": "tel:+1234567890"
+				"urn": "tel:+1234567890",
+				"expires_on": "2022-02-03T13:45:30Z"
 			}`,
 		},
 		{
@@ -451,20 +494,21 @@ func TestEventMarshaling(t *testing.T) {
 					flows.NewContactReference(flows.ContactUUID("b2aaf598-1bb3-4c7d-b6bb-1f8dbe2ac16f"), "Jim"),
 				},
 				"age > 20",
+				events.Exclusions{InAFlow: true},
 				false,
 				[]urns.URN{urns.URN("tel:+12345678900")},
 				json.RawMessage(`{"uuid": "779eaf3f-1c59-4374-a7cb-0eae9c5e8800"}`),
 				&flows.SessionHistory{ParentUUID: "418a704c-f33e-4924-a00e-1763d1498a13", Ancestors: 2, AncestorsSinceInput: 0},
 			),
 			`{
+				"type": "session_triggered",
+				"created_on": "2018-10-18T14:20:30.000123456Z",
 				"contacts": [
 					{
 						"name": "Jim",
 						"uuid": "b2aaf598-1bb3-4c7d-b6bb-1f8dbe2ac16f"
 					}
 				],
-				"contact_query": "age > 20",
-				"created_on": "2018-10-18T14:20:30.000123456Z",
 				"flow": {
 					"name": "Collect Age",
 					"uuid": "e4d441f0-24e3-4627-85fb-1e99e733baf0"
@@ -475,6 +519,11 @@ func TestEventMarshaling(t *testing.T) {
 						"uuid": "5f9fd4f7-4b0f-462a-a598-18bfc7810412"
 					}
 				],
+				"urns": [
+					"tel:+12345678900"
+				],
+				"contact_query": "age > 20",
+				"exclusions": {"in_a_flow": true},
 				"run_summary": {
 					"uuid": "779eaf3f-1c59-4374-a7cb-0eae9c5e8800"
 				},
@@ -482,35 +531,30 @@ func TestEventMarshaling(t *testing.T) {
 					"parent_uuid": "418a704c-f33e-4924-a00e-1763d1498a13",
 					"ancestors": 2,
 					"ancestors_since_input": 0
-				},
-				"type": "session_triggered",
-				"urns": [
-					"tel:+12345678900"
-				]
+				}
 			}`,
 		},
 		{
-			events.NewTicketOpened(
-				flows.NewTicket(
-					"a8b949ea-60c5-4f78-ae47-9c0a0ba61aa6",
-					assets.NewTicketerReference("5546b817-48b5-41e9-8c3a-26a4eb469003", "Support"),
-					"Need help",
-					"Where are my cookies?",
-					"1243252",
-				),
-			),
+			events.NewTicketOpened(ticket),
 			`{
 				"type": "ticket_opened",
 				"created_on": "2018-10-18T14:20:30.000123456Z",
 				"ticket": {
-					"uuid": "a8b949ea-60c5-4f78-ae47-9c0a0ba61aa6",
+					"uuid": "7481888c-07dd-47dc-bf22-ef7448696ffe",
 					"ticketer": {
-						"uuid": "5546b817-48b5-41e9-8c3a-26a4eb469003",
-						"name": "Support"
+						"uuid": "19dc6346-9623-4fe4-be80-538d493ecdf5",
+						"name": "Support Tickets"
 					},
-					"subject": "Need help",
+					"topic": {
+						"uuid": "472a7a73-96cb-4736-b567-056d987cc5b4",
+         				"name": "Weather"
+					},
 					"body": "Where are my cookies?",
-					"external_id": "1243252"
+					"external_id": "1243252",
+					"assignee": {
+						"email": "bob@nyaruka.com",
+						"name": "Bob"
+					}
 				}
 			}`,
 		},
@@ -519,12 +563,15 @@ func TestEventMarshaling(t *testing.T) {
 				assets.NewTicketerReference(assets.TicketerUUID("4b937f49-7fb7-43a5-8e57-14e2f028a471"), "Support"),
 				[]*flows.HTTPLog{
 					{
+						HTTPTrace: &flows.HTTPTrace{
+							URL:        "https://tickets.com",
+							StatusCode: 200,
+							Status:     flows.CallStatusSuccess,
+							Request:    "GET /message?v=20200513&q=hello HTTP/1.1\r\nHost: tickets.com\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
+							Response:   "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n",
+							ElapsedMS:  12,
+						},
 						CreatedOn: dates.Now(),
-						ElapsedMS: 12,
-						Request:   "GET /message?v=20200513&q=hello HTTP/1.1\r\nHost: tickets.com\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
-						Response:  "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n",
-						Status:    flows.CallStatusSuccess,
-						URL:       "https://tickets.com",
 					},
 				},
 			),
@@ -538,12 +585,14 @@ func TestEventMarshaling(t *testing.T) {
 				},
 				"http_logs": [
 					{
-						"created_on": "2018-10-18T14:20:30.000123456Z",
-						"elapsed_ms": 12,
+						"url": "https://tickets.com",
+						"status_code": 200,
+						"status": "success",
 						"request": "GET /message?v=20200513&q=hello HTTP/1.1\r\nHost: tickets.com\r\nUser-Agent: Go-http-client/1.1\r\nAccept-Encoding: gzip\r\n\r\n",
 						"response": "HTTP/1.0 200 OK\r\nContent-Length: 0\r\n\r\n",
-						"status": "success",
-						"url": "https://tickets.com"
+						"elapsed_ms": 12,
+						"retries": 0,
+						"created_on": "2018-10-18T14:20:30.000123456Z"
 					}
 				]
 			}`,
@@ -593,7 +642,7 @@ func TestWebhookCalledEventTrimming(t *testing.T) {
 	request, _ := http.NewRequest("GET", "http://temba.io/", strings.NewReader(strings.Repeat("X", 20000)))
 
 	svc := webhooks.NewService(http.DefaultClient, nil, nil, nil, 1024*1024)
-	call, err := svc.Call(nil, request)
+	call, err := svc.Call(request)
 	require.NoError(t, err)
 
 	assert.Equal(t, 42, len(call.ResponseTrace))
@@ -608,26 +657,74 @@ func TestWebhookCalledEventTrimming(t *testing.T) {
 	assert.Equal(t, "YYYYYYY...", event.Response[9990:])
 }
 
-func TestWebhookCalledEventBadUTF8(t *testing.T) {
+func TestWebhookCalledEventValid(t *testing.T) {
 	defer httpx.SetRequestor(httpx.DefaultRequestor)
 
 	httpx.SetRequestor(httpx.NewMockRequestor(map[string][]httpx.MockResponse{
 		"http://temba.io/": {
-			httpx.NewMockResponse(200, nil, "\xa0\xa1"),
+			httpx.NewMockResponse(200, map[string]string{"Header": "hello"}, "{\"foo\": \"bar\"}"),
 		},
 	}))
 
 	request, _ := http.NewRequest("GET", "http://temba.io/", nil)
 
 	svc := webhooks.NewService(http.DefaultClient, nil, nil, nil, 1024*1024)
-	call, err := svc.Call(nil, request)
+	call, err := svc.Call(request)
 	require.NoError(t, err)
 
 	event := events.NewWebhookCalled(call, flows.CallStatusSuccess, "")
 
 	assert.Equal(t, "http://temba.io/", event.URL)
-	assert.Equal(t, "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n...", event.Response)
+	assert.Equal(t, "HTTP/1.0 200 OK\r\nContent-Length: 14\r\nHeader: hello\r\n\r\n{\"foo\": \"bar\"}", event.Response)
 	assert.True(t, utf8.ValidString(event.Response))
+	assert.Equal(t, events.ExtractionValid, event.Extraction)
+}
+
+func TestWebhookCalledEventNullChar(t *testing.T) {
+	defer httpx.SetRequestor(httpx.DefaultRequestor)
+
+	httpx.SetRequestor(httpx.NewMockRequestor(map[string][]httpx.MockResponse{
+		"http://temba.io/": {
+			httpx.NewMockResponse(200, nil, "abc \x00 \\u0000 \\\u0000 \\\\u0000"),
+		},
+	}))
+
+	request, _ := http.NewRequest("GET", "http://temba.io/", nil)
+
+	svc := webhooks.NewService(http.DefaultClient, nil, nil, nil, 1024*1024)
+	call, err := svc.Call(request)
+	require.NoError(t, err)
+
+	event := events.NewWebhookCalled(call, flows.CallStatusSuccess, "")
+
+	// actual null will have been stripped, escaped null will remain
+	assert.Equal(t, "http://temba.io/", event.URL)
+	assert.Equal(t, "HTTP/1.0 200 OK\r\nContent-Length: 23\r\n\r\nabc � � \\� \\\\u0000", event.Response)
+	assert.True(t, utf8.ValidString(event.Response))
+	assert.Equal(t, events.ExtractionIgnored, event.Extraction)
+}
+
+func TestWebhookCalledEventBadUTF8(t *testing.T) {
+	defer httpx.SetRequestor(httpx.DefaultRequestor)
+
+	httpx.SetRequestor(httpx.NewMockRequestor(map[string][]httpx.MockResponse{
+		"http://temba.io/": {
+			httpx.NewMockResponse(200, map[string]string{"Bad-Header": "\xa0\xa1"}, "{\"foo\": \"\xa0\xa1\"}"),
+		},
+	}))
+
+	request, _ := http.NewRequest("GET", "http://temba.io/", nil)
+
+	svc := webhooks.NewService(http.DefaultClient, nil, nil, nil, 1024*1024)
+	call, err := svc.Call(request)
+	require.NoError(t, err)
+
+	event := events.NewWebhookCalled(call, flows.CallStatusSuccess, "")
+
+	assert.Equal(t, "http://temba.io/", event.URL)
+	assert.Equal(t, "HTTP/1.0 200 OK\r\nContent-Length: 13\r\nBad-Header: �\r\n\r\n...", event.Response)
+	assert.True(t, utf8.ValidString(event.Response))
+	assert.Equal(t, events.ExtractionCleaned, event.Extraction)
 }
 
 func TestDeprecatedEvents(t *testing.T) {
@@ -636,14 +733,16 @@ func TestDeprecatedEvents(t *testing.T) {
 		"created_on": "2006-01-02T15:04:05Z",
 		"classifier": {"uuid": "1c06c884-39dd-4ce4-ad9f-9a01cbe6c000", "name": "Booking"},
 		"http_logs": [
-		{
-			"url": "https://api.wit.ai/message?v=20170307&q=hello",
-			"status": "success",
-			"request": "GET /message?v=20170307&q=hello HTTP/1.1",
-			"response": "HTTP/1.1 200 OK\r\n\r\n{\"intents\":[]}",
-			"created_on": "2006-01-02T15:04:05Z",
-			"elapsed_ms": 123
-		}
+			{
+				"url": "https://api.wit.ai/message?v=20170307&q=hello",
+				"status_code": 200,
+				"status": "success",
+				"request": "GET /message?v=20170307&q=hello HTTP/1.1",
+				"response": "HTTP/1.1 200 OK\r\n\r\n{\"intents\":[]}",
+				"elapsed_ms": 123,
+				"retries": 0,
+				"created_on": "2006-01-02T15:04:05Z"
+			}
 		]
 	}`)
 
@@ -653,5 +752,5 @@ func TestDeprecatedEvents(t *testing.T) {
 
 	marshaled, err := jsonx.Marshal(e)
 	assert.NoError(t, err)
-	test.AssertEqualJSON(t, eventJSON, marshaled, "marshal event mismatch")
+	test.AssertEqualJSON(t, eventJSON, marshaled)
 }

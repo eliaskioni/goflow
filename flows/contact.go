@@ -15,6 +15,7 @@ import (
 	"github.com/nyaruka/goflow/envs"
 	"github.com/nyaruka/goflow/excellent/types"
 	"github.com/nyaruka/goflow/utils"
+	"github.com/shopspring/decimal"
 
 	"github.com/pkg/errors"
 	validator "gopkg.in/go-playground/validator.v9"
@@ -56,6 +57,7 @@ type Contact struct {
 	urns       URNList
 	groups     *GroupList
 	fields     FieldValues
+	tickets    *TicketList
 
 	// transient fields
 	assets SessionAssets
@@ -75,6 +77,7 @@ func NewContact(
 	urns []urns.URN,
 	groups []*assets.GroupReference,
 	fields map[string]*Value,
+	tickets []*Ticket,
 	missing assets.MissingCallback) (*Contact, error) {
 
 	urnList, err := ReadURNList(sa, urns, missing)
@@ -84,6 +87,7 @@ func NewContact(
 
 	groupList := NewGroupList(sa, groups, missing)
 	fieldValues := NewFieldValues(sa, fields, missing)
+	ticketList := NewTicketList(tickets)
 
 	return &Contact{
 		uuid:       uuid,
@@ -97,6 +101,7 @@ func NewContact(
 		urns:       urnList,
 		groups:     groupList,
 		fields:     fieldValues,
+		tickets:    ticketList,
 		assets:     sa,
 	}, nil
 }
@@ -114,6 +119,7 @@ func NewEmptyContact(sa SessionAssets, name string, language envs.Language, time
 		urns:       URNList{},
 		groups:     NewGroupList(sa, nil, assets.IgnoreMissing),
 		fields:     make(FieldValues),
+		tickets:    NewTicketList([]*Ticket{}),
 		assets:     sa,
 	}
 }
@@ -136,6 +142,7 @@ func (c *Contact) Clone() *Contact {
 		urns:       c.urns.clone(),
 		groups:     c.groups.clone(),
 		fields:     c.fields.clone(),
+		tickets:    c.tickets.clone(),
 		assets:     c.assets,
 	}
 }
@@ -263,6 +270,9 @@ func (c *Contact) Fields() FieldValues { return c.fields }
 // Groups returns the groups that this contact belongs to
 func (c *Contact) Groups() *GroupList { return c.groups }
 
+// Tickets returns the tickets that this contact has open
+func (c *Contact) Tickets() *TicketList { return c.tickets }
+
 // Reference returns a reference to this contact
 func (c *Contact) Reference() *ContactReference {
 	if c == nil {
@@ -304,6 +314,7 @@ func (c *Contact) Format(env envs.Environment) string {
 //   groups:[]group -> the groups the contact belongs to
 //   fields:fields -> the custom field values of the contact
 //   channel:channel -> the preferred channel of the contact
+//   tickets:[]ticket -> the open tickets of the contact
 //
 // @context contact
 func (c *Contact) Context(env envs.Environment) map[string]types.XValue {
@@ -342,6 +353,7 @@ func (c *Contact) Context(env envs.Environment) map[string]types.XValue {
 		"groups":       c.groups.ToXValue(env),
 		"fields":       Context(env, c.Fields()),
 		"channel":      Context(env, c.PreferredChannel()),
+		"tickets":      c.tickets.ToXValue(env),
 	}
 }
 
@@ -429,20 +441,16 @@ func (c *Contact) UpdatePreferredChannel(channel *Channel) bool {
 }
 
 // ReevaluateQueryBasedGroups reevaluates membership of all query based groups for this contact
-func (c *Contact) ReevaluateQueryBasedGroups(env envs.Environment) ([]*Group, []*Group, []error) {
+func (c *Contact) ReevaluateQueryBasedGroups(env envs.Environment) ([]*Group, []*Group) {
 	added := make([]*Group, 0)
 	removed := make([]*Group, 0)
-	errs := make([]error, 0)
 
 	for _, group := range c.assets.Groups().All() {
 		if !group.UsesQuery() {
 			continue
 		}
 
-		qualifies, err := group.CheckQueryBasedMembership(env, c)
-		if err != nil {
-			errs = append(errs, errors.Wrapf(err, "unable to re-evaluate membership of group '%s'", group.Name()))
-		}
+		qualifies := group.CheckQueryBasedMembership(env, c)
 
 		if qualifies {
 			if c.groups.Add(group) {
@@ -455,20 +463,18 @@ func (c *Contact) ReevaluateQueryBasedGroups(env envs.Environment) ([]*Group, []
 		}
 	}
 
-	return added, removed, errs
+	return added, removed
 }
 
 // QueryProperty resolves a contact query search key for this contact
+//
+// Note that this method excludes id, group and flow search attributes as those are disallowed
+// query based groups.
 func (c *Contact) QueryProperty(env envs.Environment, key string, propType contactql.PropertyType) []interface{} {
 	if propType == contactql.PropertyTypeAttribute {
 		switch key {
 		case contactql.AttributeUUID:
 			return []interface{}{string(c.uuid)}
-		case contactql.AttributeID:
-			if c.id != 0 {
-				return []interface{}{fmt.Sprintf("%d", c.id)}
-			}
-			return nil
 		case contactql.AttributeName:
 			if c.name != "" {
 				return []interface{}{c.name}
@@ -485,12 +491,8 @@ func (c *Contact) QueryProperty(env envs.Environment, key string, propType conta
 				vals[i] = urn.URN().Path()
 			}
 			return vals
-		case contactql.AttributeGroup:
-			vals := make([]interface{}, c.Groups().Count())
-			for i, group := range c.Groups().All() {
-				vals[i] = group.Name()
-			}
-			return vals
+		case contactql.AttributeTickets:
+			return []interface{}{decimal.NewFromInt(int64(c.tickets.Count()))}
 		case contactql.AttributeCreatedOn:
 			return []interface{}{c.createdOn}
 		case contactql.AttributeLastSeenOn:
@@ -571,6 +573,7 @@ type contactEnvelope struct {
 	URNs       []urns.URN               `json:"urns,omitempty"      validate:"dive,urn"`
 	Groups     []*assets.GroupReference `json:"groups,omitempty"    validate:"dive"`
 	Fields     map[string]*Value        `json:"fields,omitempty"`
+	Tickets    []json.RawMessage        `json:"tickets,omitempty"`
 }
 
 // ReadContact decodes a contact from the passed in JSON
@@ -615,11 +618,29 @@ func ReadContact(sa SessionAssets, data json.RawMessage, missing assets.MissingC
 	c.groups = NewGroupList(sa, envelope.Groups, missing)
 	c.fields = NewFieldValues(sa, envelope.Fields, missing)
 
+	tickets := make([]*Ticket, len(envelope.Tickets))
+	for i := range envelope.Tickets {
+		tickets[i], err = ReadTicket(sa, envelope.Tickets[i], missing)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to read ticket")
+		}
+	}
+	c.tickets = NewTicketList(tickets)
+
 	return c, nil
 }
 
 // MarshalJSON marshals this contact into JSON
 func (c *Contact) MarshalJSON() ([]byte, error) {
+	var err error
+	tickets := make([]json.RawMessage, len(c.tickets.tickets))
+	for i, ticket := range c.tickets.tickets {
+		tickets[i], err = jsonx.Marshal(ticket)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	ce := &contactEnvelope{
 		Name:       c.name,
 		UUID:       c.uuid,
@@ -628,16 +649,13 @@ func (c *Contact) MarshalJSON() ([]byte, error) {
 		Language:   c.language,
 		CreatedOn:  c.createdOn,
 		LastSeenOn: c.lastSeenOn,
+		URNs:       c.urns.RawURNs(),
+		Groups:     c.groups.references(),
+		Tickets:    tickets,
 	}
 
-	ce.URNs = c.urns.RawURNs()
 	if c.timezone != nil {
 		ce.Timezone = c.timezone.String()
-	}
-
-	ce.Groups = make([]*assets.GroupReference, c.groups.Count())
-	for i, group := range c.groups.All() {
-		ce.Groups[i] = group.Reference()
 	}
 
 	ce.Fields = make(map[string]*Value)

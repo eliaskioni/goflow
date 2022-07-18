@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -18,7 +19,6 @@ import (
 	"github.com/nyaruka/goflow/envs"
 	"github.com/nyaruka/goflow/excellent/types"
 	"github.com/nyaruka/goflow/utils"
-
 	"github.com/shopspring/decimal"
 )
 
@@ -26,7 +26,7 @@ var nanosPerSecond = decimal.RequireFromString("1000000000")
 var nonPrintableRegex = regexp.MustCompile(`[\p{Cc}\p{C}]`)
 
 func init() {
-	builtin := map[string]types.XFunction{
+	builtin := map[string]types.XFunc{
 		// type conversion
 		"text":     OneArgFunction(Text),
 		"boolean":  OneArgFunction(Boolean),
@@ -44,7 +44,6 @@ func init() {
 		"trim":              TextAndOptionalTextFunction(Trim, types.XTextEmpty),
 		"trim_left":         TextAndOptionalTextFunction(TrimLeft, types.XTextEmpty),
 		"trim_right":        TextAndOptionalTextFunction(TrimRight, types.XTextEmpty),
-		"join":              TwoArgFunction(Join),
 		"title":             OneTextFunction(Title),
 		"word":              InitialTextFunction(1, 2, Word),
 		"remove_first_word": OneTextFunction(RemoveFirstWord),
@@ -101,6 +100,14 @@ func init() {
 		// time functions
 		"parse_time":      TwoArgFunction(ParseTime),
 		"time_from_parts": ThreeIntegerFunction(TimeFromParts),
+
+		// array functions
+		"join":    TwoArgFunction(Join),
+		"reverse": OneArrayFunction(Reverse),
+		"sort":    OneArrayFunction(Sort),
+		"sum":     OneArrayFunction(Sum),
+		"unique":  OneArrayFunction(Unique),
+		"concat":  TwoArrayFunction(Concat),
 
 		// encoded text functions
 		"urn_parts":        OneTextFunction(URNParts),
@@ -403,13 +410,7 @@ func Code(env envs.Environment, text types.XText) types.XValue {
 //
 // @function split(text, [,delimiters])
 func Split(env envs.Environment, text types.XText, delimiters types.XText) types.XValue {
-	var splits []string
-
-	if delimiters != types.XTextEmpty {
-		splits = utils.TokenizeStringByChars(text.Native(), delimiters.Native())
-	} else {
-		splits = utils.TokenizeString(text.Native())
-	}
+	splits := extractWords(text.Native(), delimiters.Native())
 
 	nonEmpty := make([]types.XValue, 0)
 	for _, split := range splits {
@@ -466,39 +467,6 @@ func TrimRight(env envs.Environment, text types.XText, chars types.XText) types.
 	return types.NewXText(strings.TrimRightFunc(text.Native(), unicode.IsSpace))
 }
 
-// Join joins the given `array` of strings with `separator` to make text.
-//
-//   @(join(array("a", "b", "c"), "|")) -> a|b|c
-//   @(join(split("a.b.c", "."), " ")) -> a b c
-//
-// @function join(array, separator)
-func Join(env envs.Environment, arg1 types.XValue, arg2 types.XValue) types.XValue {
-	array, xerr := types.ToXArray(env, arg1)
-	if xerr != nil {
-		return xerr
-	}
-
-	separator, xerr := types.ToXText(env, arg2)
-	if xerr != nil {
-		return xerr
-	}
-
-	var output bytes.Buffer
-	for i := 0; i < array.Count(); i++ {
-		if i > 0 {
-			output.WriteString(separator.Native())
-		}
-		itemAsStr, xerr := types.ToXText(env, array.Get(i))
-		if xerr != nil {
-			return xerr
-		}
-
-		output.WriteString(itemAsStr.Native())
-	}
-
-	return types.NewXText(output.String())
-}
-
 // Char returns the character for the given UNICODE `code`.
 //
 // It is the inverse of [function:code].
@@ -550,16 +518,15 @@ func Word(env envs.Environment, text types.XText, args ...types.XValue) types.XV
 		return xerr
 	}
 
-	var words []string
+	delimiters := types.XTextEmpty
 	if len(args) == 2 && args[1] != nil {
-		delimiters, xerr := types.ToXText(env, args[1])
+		delimiters, xerr = types.ToXText(env, args[1])
 		if xerr != nil {
 			return xerr
 		}
-		words = utils.TokenizeStringByChars(text.Native(), delimiters.Native())
-	} else {
-		words = utils.TokenizeString(text.Native())
 	}
+
+	words := extractWords(text.Native(), delimiters.Native())
 
 	offset := index
 	if offset < 0 {
@@ -580,19 +547,21 @@ func Word(env envs.Environment, text types.XText, args ...types.XValue) types.XV
 //
 // @function remove_first_word(text)
 func RemoveFirstWord(env envs.Environment, text types.XText) types.XValue {
-	firstWordVal := Word(env, text, types.XNumberZero)
-	firstWord, isText := firstWordVal.(types.XText)
-	if !isText || firstWord == types.XTextEmpty {
+	s := text.Native()
+	words := extractWords(s, "")
+	if len(words) < 2 {
 		return types.XTextEmpty
 	}
 
-	firstWordStart := strings.Index(text.Native(), firstWord.Native())
-	firstWordEnd := firstWordStart + firstWord.Length()
+	// find first word and remove
+	w1Start := strings.Index(s, words[0])
+	s = s[w1Start+len(words[0]):]
 
-	remainder := text.Slice(firstWordEnd, text.Length())
+	// find where second word starts and discard everything up to that
+	w2Start := strings.Index(s, words[1])
+	s = s[w2Start:]
 
-	// remove any white space left at start
-	return types.NewXText(strings.TrimLeft(remainder.Native(), " "))
+	return types.NewXText(s)
 }
 
 // WordSlice extracts a sub-sequence of words from `text`.
@@ -621,7 +590,7 @@ func WordSlice(env envs.Environment, text types.XText, args ...types.XValue) typ
 	}
 
 	end := -1
-	if len(args) == 2 {
+	if len(args) >= 2 {
 		if end, xerr = types.ToInteger(env, args[1]); xerr != nil {
 			return xerr
 		}
@@ -630,16 +599,15 @@ func WordSlice(env envs.Environment, text types.XText, args ...types.XValue) typ
 		return types.NewXErrorf("must have a end which is greater than the start")
 	}
 
-	var words []string
-	if len(args) == 3 && args[2] != nil {
-		delimiters, xerr := types.ToXText(env, args[2])
+	delimiters := types.XTextEmpty
+	if len(args) >= 3 && args[2] != nil {
+		delimiters, xerr = types.ToXText(env, args[2])
 		if xerr != nil {
 			return xerr
 		}
-		words = utils.TokenizeStringByChars(text.Native(), delimiters.Native())
-	} else {
-		words = utils.TokenizeString(text.Native())
 	}
+
+	words := extractWords(text.Native(), delimiters.Native())
 
 	if start >= len(words) {
 		return types.XTextEmpty
@@ -668,13 +636,7 @@ func WordSlice(env envs.Environment, text types.XText, args ...types.XValue) typ
 //
 // @function word_count(text [,delimiters])
 func WordCount(env envs.Environment, text types.XText, delimiters types.XText) types.XValue {
-	var words []string
-
-	if delimiters != types.XTextEmpty {
-		words = utils.TokenizeStringByChars(text.Native(), delimiters.Native())
-	} else {
-		words = utils.TokenizeString(text.Native())
-	}
+	words := extractWords(text.Native(), delimiters.Native())
 
 	return types.NewXNumberFromInt(len(words))
 }
@@ -1544,6 +1506,152 @@ func TimeFromParts(env envs.Environment, hour, minute, second int) types.XValue 
 	return types.NewXTime(dates.NewTimeOfDay(hour, minute, second, 0))
 }
 
+//------------------------------------------------------------------------------------------
+// Array Functions
+//------------------------------------------------------------------------------------------
+
+// Join joins the given `array` of strings with `separator` to make text.
+//
+//   @(join(array("a", "b", "c"), "|")) -> a|b|c
+//   @(join(split("a.b.c", "."), " ")) -> a b c
+//
+// @function join(array, separator)
+func Join(env envs.Environment, arg1 types.XValue, arg2 types.XValue) types.XValue {
+	array, xerr := types.ToXArray(env, arg1)
+	if xerr != nil {
+		return xerr
+	}
+
+	separator, xerr := types.ToXText(env, arg2)
+	if xerr != nil {
+		return xerr
+	}
+
+	var output bytes.Buffer
+	for i := 0; i < array.Count(); i++ {
+		if i > 0 {
+			output.WriteString(separator.Native())
+		}
+		itemAsStr, xerr := types.ToXText(env, array.Get(i))
+		if xerr != nil {
+			return xerr
+		}
+
+		output.WriteString(itemAsStr.Native())
+	}
+
+	return types.NewXText(output.String())
+}
+
+// Reverse returns a new array with the values of `array` reversed.
+//
+//   @(reverse(array(3, 1, 2))) -> [2, 1, 3]
+//   @(reverse(array("C", "A", "B"))) -> [B, A, C]
+//
+// @function reverse(array)
+func Reverse(env envs.Environment, array *types.XArray) types.XValue {
+	reversed := make([]types.XValue, array.Count())
+	for i := 0; i < array.Count(); i++ {
+		reversed[array.Count()-(i+1)] = array.Get(i)
+	}
+	return types.NewXArray(reversed...)
+}
+
+// Sort returns a new array with the values of `array` sorted.
+//
+//   @(sort(array(3, 1, 2))) -> [1, 2, 3]
+//   @(sort(array("C", "A", "B"))) -> [A, B, C]
+//
+// @function sort(array)
+func Sort(env envs.Environment, array *types.XArray) types.XValue {
+	sorted := make([]types.XValue, array.Count())
+	for i := 0; i < array.Count(); i++ {
+		val := array.Get(i)
+
+		_, isComparable := val.(types.XComparable)
+		if !isComparable {
+			return types.NewXErrorf("%s isn't a comparable type", types.Describe(val))
+		}
+
+		sorted[i] = val
+	}
+
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].(types.XComparable).Compare(sorted[j]) < 0
+	})
+
+	return types.NewXArray(sorted...)
+}
+
+// Sum sums the items in the given `array`.
+//
+//   @(sum(array(1, 2, "3"))) -> 6
+//
+// @function sum(array)
+func Sum(env envs.Environment, array *types.XArray) types.XValue {
+	total := decimal.Zero
+	for i := 0; i < array.Count(); i++ {
+		itemAsNum, xerr := types.ToXNumber(env, array.Get(i))
+		if xerr != nil {
+			return xerr
+		}
+
+		total = total.Add(itemAsNum.Native())
+	}
+
+	return types.NewXNumber(total)
+}
+
+// Unique returns the unique values in `array`.
+//
+//   @(unique(array(1, 3, 2, 3))) -> [1, 3, 2]
+//   @(unique(array("hi", "there", "hi"))) -> [hi, there]
+//
+// @function unique(array)
+func Unique(env envs.Environment, array *types.XArray) types.XValue {
+	unique := make([]types.XValue, 0, array.Count())
+	for i := 0; i < array.Count(); i++ {
+		val := array.Get(i)
+
+		seen := false
+		for j := 0; j < len(unique); j++ {
+			if (val == nil && unique[j] == nil) || types.Equals(val, unique[j]) {
+				seen = true
+				break
+			}
+		}
+
+		if !seen {
+			unique = append(unique, val)
+		}
+	}
+
+	return types.NewXArray(unique...)
+}
+
+// Concat returns the result of concatenating two arrays.
+//
+//   @(concat(array("a", "b"), array("c", "d"))) -> [a, b, c, d]
+//   @(unique(concat(array(1, 2, 3), array(3, 4)))) -> [1, 2, 3, 4]
+//
+// @function concat(array1, array2)
+func Concat(env envs.Environment, array1 *types.XArray, array2 *types.XArray) types.XValue {
+	both := make([]types.XValue, 0, array1.Count()+array2.Count())
+
+	for i := 0; i < array1.Count(); i++ {
+		both = append(both, array1.Get(i))
+	}
+	for i := 0; i < array2.Count(); i++ {
+		both = append(both, array2.Get(i))
+	}
+
+	return types.NewXArray(both...)
+}
+
+//------------------------------------------------------------------------------------------
+// Encoded Text Functions
+//------------------------------------------------------------------------------------------
+
 // URNParts parses a URN into its different parts
 //
 //   @(urn_parts("tel:+593979012345")) -> {display: , path: +593979012345, scheme: tel}
@@ -1899,7 +2007,7 @@ func IsError(env envs.Environment, value types.XValue) types.XValue {
 //
 // It will return an error if it is passed an item which isn't countable.
 //
-//   @(count(contact.fields)) -> 5
+//   @(count(contact.fields)) -> 6
 //   @(count(array())) -> 0
 //   @(count(array("a", "b", "c"))) -> 3
 //   @(count(1234)) -> ERROR
@@ -1998,6 +2106,8 @@ func ExtractObject(env envs.Environment, args ...types.XValue) types.XValue {
 // If the given function takes more than one argument, you can pass additional arguments after the function.
 //
 //   @(foreach(array("a", "b", "c"), upper)) -> [A, B, C]
+//   @(foreach(array("a", "b", "c"), (x) => x & "1")) -> [a1, b1, c1]
+//   @(foreach(array("a", "b", "c"), (x) => object("v", x))) -> [{v: a}, {v: b}, {v: c}]
 //   @(foreach(array("the man", "fox", "jumped up"), word, 0)) -> [the, fox, jumped]
 //
 // @function foreach(values, func, [args...])
@@ -2007,7 +2117,7 @@ func ForEach(env envs.Environment, args ...types.XValue) types.XValue {
 		return xerr
 	}
 
-	function, isFunction := args[1].(types.XFunction)
+	function, isFunction := args[1].(*types.XFunction)
 	if !isFunction {
 		return types.NewXErrorf("requires an function as its second argument")
 	}
@@ -2020,7 +2130,7 @@ func ForEach(env envs.Environment, args ...types.XValue) types.XValue {
 		oldItem := array.Get(i)
 		funcArgs := append([]types.XValue{oldItem}, otherArgs...)
 
-		newItem := Call(env, function.Describe(), function, funcArgs)
+		newItem := function.Call(env, funcArgs)
 		if types.IsXError(newItem) {
 			return newItem
 		}
@@ -2044,7 +2154,7 @@ func ForEachValue(env envs.Environment, args ...types.XValue) types.XValue {
 		return xerr
 	}
 
-	function, isFunction := args[1].(types.XFunction)
+	function, isFunction := args[1].(*types.XFunction)
 	if !isFunction {
 		return types.NewXErrorf("requires an function as its second argument")
 	}
@@ -2058,7 +2168,7 @@ func ForEachValue(env envs.Environment, args ...types.XValue) types.XValue {
 		oldItem, _ := object.Get(prop)
 		funcArgs := append([]types.XValue{oldItem}, otherArgs...)
 
-		newItem := Call(env, function.Describe(), function, funcArgs)
+		newItem := function.Call(env, funcArgs)
 		if types.IsXError(newItem) {
 			return newItem
 		}

@@ -6,12 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/buger/jsonparser"
 	"github.com/nyaruka/gocommon/jsonx"
 	"github.com/nyaruka/gocommon/urns"
 	"github.com/nyaruka/gocommon/uuids"
@@ -26,8 +26,6 @@ import (
 	"github.com/nyaruka/goflow/services/classification/wit"
 	"github.com/nyaruka/goflow/services/webhooks"
 	"github.com/nyaruka/goflow/utils"
-
-	"github.com/buger/jsonparser"
 	"github.com/pkg/errors"
 )
 
@@ -92,7 +90,7 @@ func createEngine(witToken string) flows.Engine {
 		WithWebhookServiceFactory(webhooks.NewServiceFactory(http.DefaultClient, nil, nil, map[string]string{"User-Agent": "goflow-runner"}, 10000))
 
 	if witToken != "" {
-		builder.WithClassificationServiceFactory(func(session flows.Session, classifier *flows.Classifier) (flows.ClassificationService, error) {
+		builder.WithClassificationServiceFactory(func(classifier *flows.Classifier) (flows.ClassificationService, error) {
 			if classifier.Type() == "wit" {
 				return wit.NewService(http.DefaultClient, nil, classifier, witToken), nil
 			}
@@ -105,7 +103,7 @@ func createEngine(witToken string) flows.Engine {
 
 // RunFlow steps through a flow
 func RunFlow(eng flows.Engine, assetsPath string, flowUUID assets.FlowUUID, initialMsg string, contactLang envs.Language, in io.Reader, out io.Writer) (*Repro, error) {
-	assetsJSON, err := ioutil.ReadFile(assetsPath)
+	assetsJSON, err := os.ReadFile(assetsPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error reading assets file '%s'", assetsPath)
 	}
@@ -172,7 +170,7 @@ func RunFlow(eng flows.Engine, assetsPath string, flowUUID assets.FlowUUID, init
 	printEvents(sprint.Events(), out)
 	scanner := bufio.NewScanner(in)
 
-	for session.Wait() != nil {
+	for session.Status() == flows.SessionStatusWaiting {
 
 		// ask for input
 		fmt.Fprintf(out, "> ")
@@ -259,7 +257,7 @@ func PrintEvent(event flows.Event, out io.Writer) {
 	case *events.DialEndedEvent:
 		msg = fmt.Sprintf("☎️ dial ended with '%s'", typed.Dial.Status)
 	case *events.DialWaitEvent:
-		msg = fmt.Sprintf("⏳ waiting for dial (type /dial <answered|no_answer|busy|failed>)...")
+		msg = "⏳ waiting for dial (type /dial <answered|no_answer|busy|failed>)..."
 	case *events.EmailSentEvent:
 		msg = fmt.Sprintf("✉️ email sent with subject '%s'", typed.Subject)
 	case *events.EnvironmentRefreshedEvent:
@@ -300,7 +298,7 @@ func PrintEvent(event flows.Event, out io.Writer) {
 	case *events.SessionTriggeredEvent:
 		msg = fmt.Sprintf("🏁 session triggered for '%s'", typed.Flow.Name)
 	case *events.TicketOpenedEvent:
-		msg = fmt.Sprintf("🎟️ ticket opened with subject \"%s\"", typed.Ticket.Subject)
+		msg = fmt.Sprintf("🎟️ ticket opened with topic \"%s\"", typed.Ticket.Topic.Name)
 	case *events.WaitTimedOutEvent:
 		msg = "⏲️ resuming due to wait timeout"
 	case *events.WebhookCalledEvent:

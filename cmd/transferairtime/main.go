@@ -16,7 +16,6 @@ import (
 	"github.com/nyaruka/goflow/flows/engine"
 	"github.com/nyaruka/goflow/flows/triggers"
 	"github.com/nyaruka/goflow/services/airtime/dtone"
-
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 )
@@ -59,7 +58,7 @@ func main() {
 
 	httpx.SetDebug(verbose)
 
-	svcFactory := func(flows.Session) (flows.AirtimeService, error) {
+	svcFactory := func(flows.SessionAssets) (flows.AirtimeService, error) {
 		return dtone.NewService(http.DefaultClient, nil, dtoneKey, dtoneSecret), nil
 	}
 

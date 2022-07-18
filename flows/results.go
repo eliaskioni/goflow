@@ -20,7 +20,7 @@ type Result struct {
 	Category          string          `json:"category,omitempty"`
 	CategoryLocalized string          `json:"category_localized,omitempty"`
 	NodeUUID          NodeUUID        `json:"node_uuid"`
-	Input             string          `json:"input,omitempty"`
+	Input             string          `json:"input,omitempty"` // should be called operand but too late now
 	Extra             json.RawMessage `json:"extra,omitempty"`
 	CreatedOn         time.Time       `json:"created_on" validate:"required"`
 }
@@ -79,7 +79,7 @@ type Results map[string]*Result
 
 // NewResults creates a new empty set of results
 func NewResults() Results {
-	return make(Results, 0)
+	return make(Results)
 }
 
 // Clone returns a clone of this results set

@@ -51,7 +51,7 @@ func NewSendEmail(uuid flows.ActionUUID, addresses []string, subject string, bod
 }
 
 // Execute creates the email events
-func (a *SendEmailAction) Execute(run flows.FlowRun, step flows.Step, logModifier flows.ModifierCallback, logEvent flows.EventCallback) error {
+func (a *SendEmailAction) Execute(run flows.Run, step flows.Step, logModifier flows.ModifierCallback, logEvent flows.EventCallback) error {
 	localizedSubject := run.GetText(uuids.UUID(a.UUID()), "subject", a.Subject)
 	evaluatedSubject, err := run.EvaluateTemplate(localizedSubject)
 	if err != nil {
@@ -90,9 +90,7 @@ func (a *SendEmailAction) Execute(run flows.FlowRun, step flows.Step, logModifie
 		}
 
 		// strip mailto prefix if this is an email URN
-		if strings.HasPrefix(evaluatedAddress, "mailto:") {
-			evaluatedAddress = evaluatedAddress[7:]
-		}
+		evaluatedAddress = strings.TrimPrefix(evaluatedAddress, "mailto:")
 
 		evaluatedAddresses = append(evaluatedAddresses, evaluatedAddress)
 	}
@@ -102,13 +100,13 @@ func (a *SendEmailAction) Execute(run flows.FlowRun, step flows.Step, logModifie
 		return nil
 	}
 
-	svc, err := run.Session().Engine().Services().Email(run.Session())
+	svc, err := run.Session().Engine().Services().Email(run.Session().Assets())
 	if err != nil {
 		logEvent(events.NewError(err))
 		return nil
 	}
 
-	err = svc.Send(run.Session(), evaluatedAddresses, evaluatedSubject, evaluatedBody)
+	err = svc.Send(evaluatedAddresses, evaluatedSubject, evaluatedBody)
 	if err != nil {
 		logEvent(events.NewError(errors.Wrap(err, "unable to send email")))
 	} else {

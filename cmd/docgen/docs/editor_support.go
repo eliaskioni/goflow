@@ -2,7 +2,7 @@ package docs
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -57,32 +57,10 @@ func (g *editorSupportGenerator) Generate(baseDir, outputDir string, items map[s
 	if err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(outputPath, marshaled, 0755); err != nil {
+	if err := os.WriteFile(outputPath, marshaled, 0755); err != nil {
 		return err
 	}
 	fmt.Printf(" > editor support file written to %s\n", outputPath)
-
-	// for backwards compatibility, write as two separate files as well
-	mapPath := path.Join(outputDir, "completion.json")
-	listingPath := path.Join(outputDir, "functions.json")
-
-	marshaled, err = jsonx.MarshalPretty(es.Context)
-	if err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(mapPath, marshaled, 0755); err != nil {
-		return err
-	}
-	fmt.Printf(" > %d completion map written to %s\n", len(items["context"]), mapPath)
-
-	marshaled, err = jsonx.MarshalPretty(es.Functions)
-	if err != nil {
-		return err
-	}
-	if err := ioutil.WriteFile(listingPath, marshaled, 0755); err != nil {
-		return err
-	}
-	fmt.Printf(" > %d functions written to %s\n", len(es.Functions), listingPath)
 
 	// also output list of context paths.. not used by the editor but useful for checking
 	if err := createContextPathListFile(outputDir, es.Context); err != nil {
@@ -174,7 +152,7 @@ func createContextPathListFile(outputDir string, c *completion.Completion) error
 	}
 
 	listPath := path.Join(outputDir, "completion.txt")
-	return ioutil.WriteFile(listPath, []byte(nodeOutput.String()), 0755)
+	return os.WriteFile(listPath, []byte(nodeOutput.String()), 0755)
 }
 
 func createURNsType(gettext func(string) string) completion.Type {

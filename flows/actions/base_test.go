@@ -3,8 +3,8 @@ package actions_test
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -55,7 +55,7 @@ var contactJSON = `{
 }`
 
 func TestActionTypes(t *testing.T) {
-	assetsJSON, err := ioutil.ReadFile("testdata/_assets.json")
+	assetsJSON, err := os.ReadFile("testdata/_assets.json")
 	require.NoError(t, err)
 
 	typeNames := make([]string, 0)
@@ -72,7 +72,7 @@ func TestActionTypes(t *testing.T) {
 
 func testActionType(t *testing.T, assetsJSON json.RawMessage, typeName string) {
 	testPath := fmt.Sprintf("testdata/%s.json", typeName)
-	testFile, err := ioutil.ReadFile(testPath)
+	testFile, err := os.ReadFile(testPath)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -179,7 +179,6 @@ func testActionType(t *testing.T, assetsJSON json.RawMessage, typeName string) {
 		}
 
 		envBuilder := envs.NewBuilder().
-			WithDefaultLanguage("eng").
 			WithAllowedLanguages([]envs.Language{"eng", "spa"}).
 			WithDefaultCountry("RW")
 
@@ -217,20 +216,20 @@ func testActionType(t *testing.T, assetsJSON json.RawMessage, typeName string) {
 
 		// create an engine instance
 		eng := engine.NewBuilder().
-			WithEmailServiceFactory(func(flows.Session) (flows.EmailService, error) {
+			WithEmailServiceFactory(func(flows.SessionAssets) (flows.EmailService, error) {
 				return smtp.NewService("smtp://nyaruka:pass123@mail.temba.io?from=flows@temba.io", nil)
 			}).
 			WithWebhookServiceFactory(webhooks.NewServiceFactory(http.DefaultClient, nil, nil, map[string]string{"User-Agent": "goflow-testing"}, 100000)).
-			WithClassificationServiceFactory(func(s flows.Session, c *flows.Classifier) (flows.ClassificationService, error) {
+			WithClassificationServiceFactory(func(c *flows.Classifier) (flows.ClassificationService, error) {
 				if c.Type() == "wit" {
 					return wit.NewService(http.DefaultClient, nil, c, "123456789"), nil
 				}
 				return nil, errors.Errorf("no classification service available for %s", c.Reference())
 			}).
-			WithTicketServiceFactory(func(s flows.Session, t *flows.Ticketer) (flows.TicketService, error) {
+			WithTicketServiceFactory(func(t *flows.Ticketer) (flows.TicketService, error) {
 				return test.NewTicketService(t), nil
 			}).
-			WithAirtimeServiceFactory(func(flows.Session) (flows.AirtimeService, error) {
+			WithAirtimeServiceFactory(func(flows.SessionAssets) (flows.AirtimeService, error) {
 				return dtone.NewService(http.DefaultClient, nil, "nyaruka", "123456789"), nil
 			}).
 			Build()
@@ -313,7 +312,7 @@ func testActionType(t *testing.T, assetsJSON json.RawMessage, typeName string) {
 		actualJSON, err := jsonx.MarshalPretty(tests)
 		require.NoError(t, err)
 
-		err = ioutil.WriteFile(testPath, actualJSON, 0666)
+		err = os.WriteFile(testPath, actualJSON, 0666)
 		require.NoError(t, err)
 	}
 }
@@ -440,8 +439,9 @@ func TestConstructors(t *testing.T) {
 			actions.NewOpenTicket(
 				actionUUID,
 				assets.NewTicketerReference(assets.TicketerUUID("0baee364-07a7-4c93-9778-9f55a35903bb"), "Support Tickets"),
-				"Need help",
+				assets.NewTopicReference("472a7a73-96cb-4736-b567-056d987cc5b4", "Weather"),
 				"Where are my cookies?",
+				assets.NewUserReference("bob@nyaruka.com", "Bob McTickets"),
 				"Ticket",
 			),
 			`{
@@ -451,8 +451,15 @@ func TestConstructors(t *testing.T) {
 					"uuid": "0baee364-07a7-4c93-9778-9f55a35903bb",
 					"name": "Support Tickets"
 				},
-				"subject": "Need help",
+				"topic": {
+					"uuid": "472a7a73-96cb-4736-b567-056d987cc5b4",
+					"name": "Weather"
+				},
 				"body": "Where are my cookies?",
+				"assignee": {
+					"email": "bob@nyaruka.com",
+					"name": "Bob McTickets"
+				},
 				"result_name": "Ticket"
 			}`,
 		},
@@ -710,6 +717,7 @@ func TestConstructors(t *testing.T) {
 					"name": "Testers"
 				}
 			],
+			"exclusions": {},
 			"create_contact": true
 		}`,
 		},
@@ -744,6 +752,7 @@ func TestResthookPayload(t *testing.T) {
 	defer server.Close()
 
 	session, _, err := test.CreateTestSession(server.URL, envs.RedactionPolicyNone)
+	require.NoError(t, err)
 	run := session.Runs()[0]
 
 	payload, err := run.EvaluateTemplate(actions.ResthookPayload)
@@ -804,10 +813,11 @@ func TestStartSessionLoopProtection(t *testing.T) {
 	contact := flows.NewEmptyContact(sa, "Bob", envs.Language("eng"), nil)
 
 	eng := engine.NewBuilder().Build()
-	session, sprint, err := eng.NewSession(sa, triggers.NewBuilder(env, flow, contact).Manual().Build())
+	_, sprint, err := eng.NewSession(sa, triggers.NewBuilder(env, flow, contact).Manual().Build())
 	require.NoError(t, err)
 
 	sessions := make([]flows.Session, 0)
+	var session flows.Session
 
 	for {
 		// look for a session triggered event

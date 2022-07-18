@@ -83,11 +83,13 @@
         },
         "events": [],
         "context": {
+            "campaign": null,
             "keyword": "",
             "origin": "",
             "params": {},
+            "ticket": null,
             "type": "flow_action",
-            "user": ""
+            "user": null
         }
     }
 ]

@@ -126,11 +126,13 @@
             }
         ],
         "context": {
+            "campaign": null,
             "keyword": "start",
             "origin": "",
             "params": {},
+            "ticket": null,
             "type": "msg",
-            "user": ""
+            "user": null
         }
     },
     {
@@ -181,11 +183,13 @@
             }
         ],
         "context": {
+            "campaign": null,
             "keyword": "",
             "origin": "",
             "params": {},
+            "ticket": null,
             "type": "msg",
-            "user": ""
+            "user": null
         }
     }
 ]

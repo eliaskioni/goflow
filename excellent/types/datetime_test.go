@@ -8,14 +8,13 @@ import (
 	"github.com/nyaruka/gocommon/jsonx"
 	"github.com/nyaruka/goflow/envs"
 	"github.com/nyaruka/goflow/excellent/types"
-
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestXDateTime(t *testing.T) {
 	env := envs.NewBuilder().WithDateFormat(envs.DateFormatDayMonthYear).Build()
-	env2 := envs.NewBuilder().WithDateFormat(envs.DateFormatYearMonthDay).WithDefaultLanguage("spa").Build()
+	env2 := envs.NewBuilder().WithDateFormat(envs.DateFormatYearMonthDay).WithAllowedLanguages([]envs.Language{"spa"}).Build()
 
 	assert.True(t, types.NewXDateTime(time.Date(2018, 4, 9, 17, 1, 30, 123456789, time.UTC)).Truthy())
 
@@ -49,7 +48,7 @@ func TestXDateTime(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "lun, 09-04-2018", formatted)
 
-	formatted, err = d1.FormatCustom(env, "YYYYYY", nil)
+	_, err = d1.FormatCustom(env, "YYYYYY", nil)
 	assert.EqualError(t, err, "'YYYYYY' is not valid in a datetime formatting layout")
 
 	d2 := d1.ReplaceTime(types.NewXTime(dates.NewTimeOfDay(16, 20, 30, 123456789)))

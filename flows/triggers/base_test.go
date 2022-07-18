@@ -3,7 +3,7 @@ package triggers_test
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -27,7 +27,7 @@ import (
 )
 
 func TestTriggerTypes(t *testing.T) {
-	assetsJSON, err := ioutil.ReadFile("testdata/_assets.json")
+	assetsJSON, err := os.ReadFile("testdata/_assets.json")
 	require.NoError(t, err)
 
 	typeNames := make([]string, 0)
@@ -44,7 +44,7 @@ func TestTriggerTypes(t *testing.T) {
 
 func testTriggerType(t *testing.T, assetsJSON json.RawMessage, typeName string) {
 	testPath := fmt.Sprintf("testdata/%s.json", typeName)
-	testFile, err := ioutil.ReadFile(testPath)
+	testFile, err := os.ReadFile(testPath)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -119,7 +119,7 @@ func testTriggerType(t *testing.T, assetsJSON json.RawMessage, typeName string) 
 		actualJSON, err := jsonx.MarshalPretty(tests)
 		require.NoError(t, err)
 
-		err = ioutil.WriteFile(testPath, actualJSON, 0666)
+		err = os.WriteFile(testPath, actualJSON, 0666)
 		require.NoError(t, err)
 	}
 }
@@ -150,7 +150,20 @@ var assetsJSON = `{
             "schemes": ["tel"],
             "roles": ["send", "receive"]
         }
-	]
+	],
+    "ticketers": [
+        {
+            "uuid": "19dc6346-9623-4fe4-be80-538d493ecdf5",
+            "name": "Support Tickets",
+            "type": "mailgun"
+        }
+    ],
+    "users": [
+        {
+            "email": "bob@nyaruka.com",
+            "name": "Bob McTickets"
+        }
+    ]
 }`
 
 func TestTriggerMarshaling(t *testing.T) {
@@ -168,8 +181,12 @@ func TestTriggerMarshaling(t *testing.T) {
 	sa, err := engine.NewSessionAssets(env, source, nil)
 	require.NoError(t, err)
 
-	flow := assets.NewFlowReference(assets.FlowUUID("7c37d7e5-6468-4b31-8109-ced2ef8b5ddc"), "Registration")
+	flow := assets.NewFlowReference("7c37d7e5-6468-4b31-8109-ced2ef8b5ddc", "Registration")
 	channel := assets.NewChannelReference("3a05eaf5-cb1b-4246-bef1-f277419c83a7", "Nexmo")
+	ticketer := sa.Ticketers().Get("19dc6346-9623-4fe4-be80-538d493ecdf5")
+	weather := sa.Topics().Get("472a7a73-96cb-4736-b567-056d987cc5b4")
+	user := sa.Users().Get("bob@nyaruka.com")
+	ticket := flows.NewTicket("276c2e43-d6f9-4c36-8e54-b5af5039acf6", ticketer, weather, "Where are my shoes?", "123456", user)
 
 	contact := flows.NewEmptyContact(sa, "Bob", envs.Language("eng"), nil)
 	contact.AddURN(urns.URN("tel:+12065551212"), nil)
@@ -230,7 +247,7 @@ func TestTriggerMarshaling(t *testing.T) {
 			triggers.NewBuilder(env, flow, contact).
 				Manual().
 				WithParams(types.NewXObject(map[string]types.XValue{"foo": types.NewXText("bar")})).
-				WithUser("bob@nyaruka.com").
+				WithUser(user).
 				WithOrigin("api").
 				AsBatch().
 				Build(),
@@ -255,8 +272,15 @@ func TestTriggerMarshaling(t *testing.T) {
 			triggers.NewBuilder(env, flow, contact).
 				Msg(flows.NewMsgIn(flows.MsgUUID("c8005ee3-4628-4d76-be66-906352cb1935"), urns.URN("tel:+1234567890"), channel, "Hi there", nil)).
 				WithMatch(triggers.NewKeywordMatch(triggers.KeywordMatchTypeFirstWord, "hi")).
+				WithConnection(channel, "tel:+12065551212").
 				Build(),
 			"msg",
+		},
+		{
+			triggers.NewBuilder(env, flow, contact).
+				Ticket(ticket, triggers.TicketEventTypeClosed).
+				Build(),
+			"ticket_closed",
 		},
 	}
 
@@ -351,24 +375,32 @@ func TestTriggerContext(t *testing.T) {
 	require.NoError(t, err)
 
 	flow := assets.NewFlowReference(assets.FlowUUID("7c37d7e5-6468-4b31-8109-ced2ef8b5ddc"), "Registration")
+	user := sa.Users().Get("bob@nyaruka.com")
 
-	contact := flows.NewEmptyContact(sa, "Bob", envs.Language("eng"), nil)
+	contact := flows.NewEmptyContact(sa, "Jim", envs.Language("eng"), nil)
 	contact.AddURN(urns.URN("tel:+12065551212"), nil)
 
 	params := types.NewXObject(map[string]types.XValue{"foo": types.NewXText("bar")})
 	trigger := triggers.NewBuilder(env, flow, contact).
 		Manual().
 		WithParams(params).
-		WithUser("bob@nyaruka.com").
+		WithUser(user).
 		WithOrigin("api").
 		AsBatch().
 		Build()
 
-	assert.Equal(t, map[string]types.XValue{
+	test.AssertXEqual(t, types.NewXObject(map[string]types.XValue{
 		"type":    types.NewXText("manual"),
 		"params":  params,
 		"keyword": types.XTextEmpty,
-		"user":    types.NewXText("bob@nyaruka.com"),
-		"origin":  types.NewXText("api"),
-	}, trigger.Context(env))
+		"user": types.NewXObject(map[string]types.XValue{
+			"__default__": types.NewXText("Bob McTickets"),
+			"email":       types.NewXText("bob@nyaruka.com"),
+			"name":        types.NewXText("Bob McTickets"),
+			"first_name":  types.NewXText("Bob"),
+		}),
+		"origin":   types.NewXText("api"),
+		"campaign": nil,
+		"ticket":   nil,
+	}), flows.Context(env, trigger))
 }

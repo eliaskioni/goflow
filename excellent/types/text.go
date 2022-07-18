@@ -1,7 +1,7 @@
 package types
 
 import (
-	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -28,7 +28,9 @@ func NewXText(value string) XText {
 }
 
 // Describe returns a representation of this type for error messages
-func (x XText) Describe() string { return fmt.Sprintf(`"%s"`, x.Native()) }
+func (x XText) Describe() string {
+	return strconv.Quote(x.Native())
+}
 
 // Truthy determines truthiness for this type
 func (x XText) Truthy() bool {
@@ -50,30 +52,17 @@ func (x XText) String() string { return `XText("` + x.Native() + `")` }
 func (x XText) Native() string { return x.native }
 
 // Equals determines equality for this type
-func (x XText) Equals(other XText) bool {
+func (x XText) Equals(o XValue) bool {
+	other := o.(XText)
+
 	return x.Native() == other.Native()
 }
 
 // Compare compares this string to another
-func (x XText) Compare(other XText) int {
+func (x XText) Compare(o XValue) int {
+	other := o.(XText)
+
 	return strings.Compare(x.Native(), other.Native())
-}
-
-// Slice returns a substring of this text
-func (x XText) Slice(start, end int) XText {
-	length := x.Length()
-	if start < 0 {
-		start = 0
-	}
-	if end > length {
-		end = length
-	}
-	if start >= length || end < start {
-		return XTextEmpty
-	}
-
-	runes := []rune(x.native)[start:end]
-	return NewXText(string(runes))
 }
 
 // Length returns the length of this string

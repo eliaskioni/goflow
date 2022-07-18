@@ -24,14 +24,13 @@ const TypeEnvironmentRefreshed string = "environment_refreshed"
 //       "date_format": "YYYY-MM-DD",
 //       "time_format": "hh:mm",
 //       "timezone": "Africa/Kigali",
-//       "default_language": "eng",
 //       "allowed_languages": ["eng", "fra"]
 //     }
 //   }
 //
 // @event environment_refreshed
 type EnvironmentRefreshedEvent struct {
-	baseEvent
+	BaseEvent
 
 	Environment json.RawMessage `json:"environment"`
 }
@@ -40,7 +39,7 @@ type EnvironmentRefreshedEvent struct {
 func NewEnvironmentRefreshed(env envs.Environment) *EnvironmentRefreshedEvent {
 	marshalled, _ := jsonx.Marshal(env)
 	return &EnvironmentRefreshedEvent{
-		baseEvent:   newBaseEvent(TypeEnvironmentRefreshed),
+		BaseEvent:   NewBaseEvent(TypeEnvironmentRefreshed),
 		Environment: marshalled,
 	}
 }

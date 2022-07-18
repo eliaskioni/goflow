@@ -97,7 +97,6 @@ var sessionTrigger = `{
     },
     "environment": {
         "date_format": "YYYY-MM-DD",
-        "default_language": "eng",
         "allowed_languages": [
             "eng", 
             "spa"
@@ -123,7 +122,7 @@ func TestRun(t *testing.T) {
 
 	run := session.Runs()[0]
 
-	checkRun := func(r flows.FlowRun) {
+	checkRun := func(r flows.Run) {
 		assert.Equal(t, string(flows.RunUUID("e7187099-7d38-4f60-955c-325957214c42")), string(r.UUID()))
 		assert.Equal(t, string(flows.RunStatusCompleted), string(r.Status()))
 		assert.Equal(t, flow, r.Flow())
@@ -166,17 +165,15 @@ func TestRunContext(t *testing.T) {
 		{`@run`, `Ryan Lewis@Registration`},
 		{`@child`, `Ryan Lewis@Collect Age`},
 		{`@child.uuid`, `9688d21d-95aa-4bed-afc7-f31b35731a3d`},
-		{`@child.run`, `Ryan Lewis@Collect Age`}, // to be removed in 13.1
+		{`@child.run`, `{status: completed}`}, // to be removed in 13.2
 		{`@child.contact.name`, `Ryan Lewis`},
-		{`@child.run.contact.name`, `Ryan Lewis`},
 		{`@child.flow.name`, "Collect Age"},
 		{`@child.status`, "completed"},
 		{`@child.fields`, "Activation Token: AACC55\nAge: 23\nGender: Male\nJoin Date: 2017-12-02T00:00:00.000000-02:00"},
 		{`@parent`, `Jasmine@Parent`},
 		{`@parent.uuid`, `4213ac47-93fd-48c4-af12-7da8218ef09d`},
-		{`@parent.run`, `Jasmine@Parent`},
+		{`@parent.run`, `{status: active}`},
 		{`@parent.contact.name`, `Jasmine`},
-		{`@parent.run.contact.name`, `Jasmine`},
 		{`@parent.flow.name`, "Parent"},
 		{`@parent.status`, "active"},
 		{`@parent.fields`, "Age: 33\nGender: Female"},
@@ -186,11 +183,11 @@ func TestRunContext(t *testing.T) {
 		{`@resume.type`, "msg"},
 		{
 			`@(json(contact.fields))`,
-			`{"activation_token":"AACC55","age":23,"gender":"Male","join_date":"2017-12-02T00:00:00.000000-02:00","not_set":null}`,
+			`{"activation_token":"AACC55","age":23,"gender":"Male","join_date":"2017-12-02T00:00:00.000000-02:00","not_set":null,"state":null}`,
 		},
 		{
 			`@(json(fields))`,
-			`{"activation_token":"AACC55","age":23,"gender":"Male","join_date":"2017-12-02T00:00:00.000000-02:00","not_set":null}`,
+			`{"activation_token":"AACC55","age":23,"gender":"Male","join_date":"2017-12-02T00:00:00.000000-02:00","not_set":null,"state":null}`,
 		},
 		{
 			`@(json(contact.urns))`,
@@ -198,7 +195,7 @@ func TestRunContext(t *testing.T) {
 		},
 		{
 			`@(json(urns))`,
-			`{"discord":null,"ext":null,"facebook":null,"fcm":null,"freshchat":null,"jiochat":null,"line":null,"mailto":"mailto:foo@bar.com","rocketchat":null,"tel":"tel:+12024561111","telegram":null,"twitter":null,"twitterid":"twitterid:54784326227#nyaruka","viber":null,"vk":null,"wechat":null,"whatsapp":null}`,
+			`{"discord":null,"ext":null,"facebook":null,"fcm":null,"freshchat":null,"instagram":null,"jiochat":null,"line":null,"mailto":"mailto:foo@bar.com","rocketchat":null,"slack":null,"tel":"tel:+12024561111","telegram":null,"twitter":null,"twitterid":"twitterid:54784326227#nyaruka","viber":null,"vk":null,"webchat":null,"wechat":null,"whatsapp":null}`,
 		},
 		{
 			`@(json(results.favorite_color))`,
@@ -214,11 +211,11 @@ func TestRunContext(t *testing.T) {
 		},
 		{
 			`@(json(parent.urns))`,
-			`{"discord":null,"ext":null,"facebook":null,"fcm":null,"freshchat":null,"jiochat":null,"line":null,"mailto":null,"rocketchat":null,"tel":"tel:+12024562222","telegram":null,"twitter":null,"twitterid":null,"viber":null,"vk":null,"wechat":null,"whatsapp":null}`,
+			`{"discord":null,"ext":null,"facebook":null,"fcm":null,"freshchat":null,"instagram":null,"jiochat":null,"line":null,"mailto":null,"rocketchat":null,"slack":null,"tel":"tel:+12024562222","telegram":null,"twitter":null,"twitterid":null,"viber":null,"vk":null,"webchat":null,"wechat":null,"whatsapp":null}`,
 		},
 		{
 			`@(json(parent.fields))`,
-			`{"activation_token":null,"age":33,"gender":"Female","join_date":null,"not_set":null}`,
+			`{"activation_token":null,"age":33,"gender":"Female","join_date":null,"not_set":null,"state":null}`,
 		},
 	}
 

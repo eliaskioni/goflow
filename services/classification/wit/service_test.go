@@ -15,13 +15,9 @@ import (
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestService(t *testing.T) {
-	session, _, err := test.CreateTestSession("", envs.RedactionPolicyNone)
-	require.NoError(t, err)
-
 	defer uuids.SetGenerator(uuids.DefaultGenerator)
 	defer dates.SetNowSource(dates.DefaultNowSource)
 	defer httpx.SetRequestor(httpx.DefaultRequestor)
@@ -75,9 +71,10 @@ func TestService(t *testing.T) {
 		"23532624376",
 	)
 
+	env := envs.NewBuilder().Build()
 	httpLogger := &flows.HTTPLogger{}
 
-	classification, err := svc.Classify(session, "book flight to Quito", httpLogger.Log)
+	classification, err := svc.Classify(env, "book flight to Quito", httpLogger.Log)
 	assert.NoError(t, err)
 	assert.Equal(t, []flows.ExtractedIntent{
 		{Name: "book_flight", Confidence: decimal.RequireFromString(`0.9024`)},

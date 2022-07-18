@@ -15,13 +15,9 @@ import (
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestService(t *testing.T) {
-	session, _, err := test.CreateTestSession("", envs.RedactionPolicyNone)
-	require.NoError(t, err)
-
 	defer uuids.SetGenerator(uuids.DefaultGenerator)
 	defer dates.SetNowSource(dates.DefaultNowSource)
 	defer httpx.SetRequestor(httpx.DefaultRequestor)
@@ -67,8 +63,6 @@ func TestService(t *testing.T) {
 		},
 	}))
 
-	session.Contact().SetLanguage("spa")
-
 	svc := bothub.NewService(
 		http.DefaultClient,
 		nil,
@@ -76,9 +70,10 @@ func TestService(t *testing.T) {
 		"f96abf2f-3b53-4766-8ea6-09a655222a02",
 	)
 
+	env := envs.NewBuilder().WithAllowedLanguages([]envs.Language{"spa"}).WithDefaultCountry("US").Build()
 	httpLogger := &flows.HTTPLogger{}
 
-	classification, err := svc.Classify(session, "book my flight to Quito", httpLogger.Log)
+	classification, err := svc.Classify(env, "book my flight to Quito", httpLogger.Log)
 	assert.NoError(t, err)
 	assert.Equal(t, []flows.ExtractedIntent{
 		{Name: "book_flight", Confidence: decimal.RequireFromString(`0.9224673593230207`)},
