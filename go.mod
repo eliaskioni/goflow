@@ -1,4 +1,4 @@
-module github.com/nyaruka/goflow
+module github.com/eliaskioni/goflow
 
 go 1.18
 
