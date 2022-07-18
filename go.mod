@@ -21,6 +21,7 @@ require (
 	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0
 	gopkg.in/mail.v2 v2.3.1 // indirect
+	github.com/gomodule/redigo v2.0.0+incompatible
 )
 
 go 1.16

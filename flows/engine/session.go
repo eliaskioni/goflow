@@ -444,7 +444,7 @@ func (s *session) visitNode(sprint flows.Sprint, run flows.FlowRun, node flows.N
 		// waits have the option to skip themselves
 		activatedWait := wait.Begin(run, logEvent)
 		if activatedWait != nil {
-			// mark ouselves as waiting and hand back to
+			// mark ourselves as waiting and hand back to
 			run.SetStatus(flows.RunStatusWaiting)
 			s.wait = activatedWait
 			s.status = flows.SessionStatusWaiting
